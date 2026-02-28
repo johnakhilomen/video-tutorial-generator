@@ -135,6 +135,9 @@ export class BrowserAgent {
     // Start continuous screenshot capture in background
     screenshotCapture.startContinuousCapture(page);
 
+    // Wait a moment to guarantee at least a few initial screenshots
+    await page.waitForTimeout(500);
+
     let iterationCount = 0;
 
     while (iterationCount < CONFIG.MAX_ITERATIONS_PER_STEP) {
@@ -212,8 +215,12 @@ export class BrowserAgent {
       logger.warn(`  Step hit max iterations (${CONFIG.MAX_ITERATIONS_PER_STEP})`);
     }
 
+    // Wait to capture a few final frames after the step completes
+    await page.waitForTimeout(500);
+
     // Stop continuous capture
     const captures = screenshotCapture.stopCapture();
+    logger.info(`  Captured ${captures.length} screenshots for step "${step.title}"`);
 
     return {
       step,

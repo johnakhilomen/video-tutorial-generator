@@ -6,7 +6,7 @@ import type { ScreenCapture } from "../types/index.js";
 
 export class ScreenshotCapture {
   private captures: ScreenCapture[] = [];
-  private intervalHandle: ReturnType<typeof setInterval> | null = null;
+  private running = false;
   private frameIndex = 0;
   private startTime = 0;
   private outputDir: string;
@@ -19,38 +19,51 @@ export class ScreenshotCapture {
     this.startTime = Date.now();
     this.frameIndex = 0;
     this.captures = [];
+    this.running = true;
 
-    this.intervalHandle = setInterval(async () => {
-      try {
-        const buffer = await page.screenshot({
-          type: "png",
-          timeout: 5000,
-          animations: "disabled",
-        });
-        const filePath = fileManager.screenshotPath(
-          this.outputDir,
-          this.frameIndex
-        );
-        await writeFile(filePath, buffer);
+    // Use a sequential async loop instead of setInterval to prevent
+    // overlapping screenshot calls that silently fail
+    const captureLoop = async () => {
+      while (this.running) {
+        const loopStart = Date.now();
+        try {
+          const buffer = await page.screenshot({
+            type: "png",
+            timeout: 5000,
+            animations: "disabled",
+          });
+          const filePath = fileManager.screenshotPath(
+            this.outputDir,
+            this.frameIndex
+          );
+          await writeFile(filePath, buffer);
 
-        this.captures.push({
-          filePath,
-          timestamp: Date.now() - this.startTime,
-          frameIndex: this.frameIndex,
-        });
+          this.captures.push({
+            filePath,
+            timestamp: Date.now() - this.startTime,
+            frameIndex: this.frameIndex,
+          });
 
-        this.frameIndex++;
-      } catch {
-        // Page might be navigating — skip this frame
+          this.frameIndex++;
+        } catch {
+          // Page might be navigating — skip this frame
+        }
+
+        // Wait for the remainder of the interval
+        const elapsed = Date.now() - loopStart;
+        const wait = Math.max(0, CONFIG.SCREENSHOT_INTERVAL_MS - elapsed);
+        if (wait > 0 && this.running) {
+          await new Promise((r) => setTimeout(r, wait));
+        }
       }
-    }, CONFIG.SCREENSHOT_INTERVAL_MS);
+    };
+
+    // Fire and forget — runs in background
+    captureLoop();
   }
 
   stopCapture(): ScreenCapture[] {
-    if (this.intervalHandle) {
-      clearInterval(this.intervalHandle);
-      this.intervalHandle = null;
-    }
+    this.running = false;
     return [...this.captures];
   }
 
