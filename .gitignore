@@ -1,0 +1,9 @@
+node_modules/
+dist/
+output/
+.env
+*.mp4
+*.mp3
+.DS_Store
+tmp/
+src/video/public/screenshots/
